@@ -1,6 +1,9 @@
+# eigen-neovim (formerly eigenvimrc)
+
 TODO: create phylogenetic tree of vimrcs
 
 This script analyzes Neovim Lua configurations hosted on GitHub and returns the most commonly used settings.
+To see the old version analyzed on vimrc's, go to the [old/](./old) folder.
 
 See [USAGE.md](./USAGE.md) if you want to reproduce the result.
 The "voting" process may iterate as follows:
