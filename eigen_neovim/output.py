@@ -4,17 +4,23 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .stats import AggregatedStats
 
+if TYPE_CHECKING:
+    from .plotting import PowerLawFit
 
-def generate_markdown_report(stats: AggregatedStats, output_path: Path) -> None:
+
+def generate_markdown_report(
+    stats: AggregatedStats, output_path: Path, power_law_fit: PowerLawFit | None = None
+) -> None:
     """Generate a markdown report of the analysis."""
     lines = [
         "# Eigen-Neovim Analysis Results",
         "",
         f"Analysis of **{stats.total_configs}** Neovim Lua configurations.",
-        f"",
+        "",
         f"Last updated: {datetime.now().strftime('%Y-%m-%d')}",
         "",
         "---",
@@ -60,10 +66,12 @@ def generate_markdown_report(stats: AggregatedStats, output_path: Path) -> None:
     )
 
     if stats.colorschemes:
-        lines.extend([
-            "| Rank | Colorscheme | Usage |",
-            "|------|-------------|-------|",
-        ])
+        lines.extend(
+            [
+                "| Rank | Colorscheme | Usage |",
+                "|------|-------------|-------|",
+            ]
+        )
         for i, cs in enumerate(stats.colorschemes[:15], 1):
             lines.append(f"| {i} | `{cs.name}` | {cs.percentage:.1f}% |")
     else:
@@ -103,6 +111,29 @@ def generate_markdown_report(stats: AggregatedStats, output_path: Path) -> None:
         )
         for km in stats.keymaps[:20]:
             lines.append(f"| `{km.mode}` | `{km.lhs}` | {km.percentage:.1f}% |")
+
+    # Power law distribution analysis
+    if power_law_fit and power_law_fit.r_squared > 0:
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                "## Distribution Analysis",
+                "",
+                "Power law fit for option usage: `y = c × x^(-α)`",
+                "",
+                f"- Coefficient (c): {power_law_fit.coefficient:.2f}",
+                f"- Exponent (α): {power_law_fit.exponent:.2f}",
+                f"- R² (goodness of fit): {power_law_fit.r_squared:.3f}",
+                "",
+                "![Distribution plot](fig.png)",
+                "",
+                "*Note: The original eigenvimrc (2017) found that option usage doesn't follow "
+                "a pure power law distribution, likely because some settings are highly "
+                "correlated with others.*",
+            ]
+        )
 
     # Metadata
     lines.extend(
@@ -172,7 +203,14 @@ def generate_eigen_lua(
     for opt in stats.options:
         if opt.percentage >= effective_threshold or options_added < top_n:
             # Skip leader keys (handled above) and internal options
-            if opt.name in ("mapleader", "maplocalleader", "loaded_netrw", "loaded_netrwPlugin", "base46_cache", "have_nerd_font"):
+            if opt.name in (
+                "mapleader",
+                "maplocalleader",
+                "loaded_netrw",
+                "loaded_netrwPlugin",
+                "base46_cache",
+                "have_nerd_font",
+            ):
                 continue
             # Determine the most common value
             if opt.values:
@@ -189,9 +227,7 @@ def generate_eigen_lua(
                 else:
                     # Escape quotes in string values
                     val = f'"{top_value}"'
-                lines.append(
-                    f"  vim.opt.{opt.name} = {val}  -- {opt.percentage:.1f}%"
-                )
+                lines.append(f"  vim.opt.{opt.name} = {val}  -- {opt.percentage:.1f}%")
                 options_added += 1
         else:
             break

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import tree_sitter_lua as tslua
-from tree_sitter import Language, Parser, Node
+from tree_sitter import Language, Node, Parser
 
 
 @dataclass
@@ -212,9 +212,7 @@ class LuaConfigParser:
             if "lazy" in call_text or "packer" in call_text:
                 self._extract_plugins(node, source, result)
 
-    def _handle_variable_declaration(
-        self, node: Node, source: bytes, result: ParseResult
-    ):
+    def _handle_variable_declaration(self, node: Node, source: bytes, result: ParseResult):
         """Handle variable declarations that might contain plugin specs."""
         text = self._get_node_text(node, source)
         # Look for plugin table patterns
@@ -233,20 +231,12 @@ class LuaConfigParser:
         if not args_node:
             return
 
-        args = [
-            c
-            for c in args_node.children
-            if c.type not in ("(", ")", ",", "comment")
-        ]
+        args = [c for c in args_node.children if c.type not in ("(", ")", ",", "comment")]
 
         if len(args) >= 2:
             mode = self._parse_value(self._get_node_text(args[0], source))
             lhs = self._parse_value(self._get_node_text(args[1], source))
-            rhs = (
-                self._parse_value(self._get_node_text(args[2], source))
-                if len(args) > 2
-                else None
-            )
+            rhs = self._parse_value(self._get_node_text(args[2], source)) if len(args) > 2 else None
             opts = {}
             if len(args) > 3:
                 opts_text = self._get_node_text(args[3], source)
@@ -271,14 +261,27 @@ class LuaConfigParser:
             # vim.cmd("colorscheme name") or vim.cmd "colorscheme name"
             r'cmd\s*\(?\s*["\']colorscheme\s+([^"\']+)["\']',
             # vim.cmd([[colorscheme name]])
-            r'cmd\s*\(?\s*\[\[colorscheme\s+([^\]]+)\]\]',
+            r"cmd\s*\(?\s*\[\[colorscheme\s+([^\]]+)\]\]",
             # General colorscheme pattern as fallback
-            r'colorscheme\s+([a-zA-Z0-9_-]+)',
+            r"colorscheme\s+([a-zA-Z0-9_-]+)",
         ]
         # Common false positives to filter out
         false_positives = {
-            "vim", "cmd", "colorscheme", "that", "the", "a", "an", "my",
-            "your", "this", "new", "old", "default", "custom", "config",
+            "vim",
+            "cmd",
+            "colorscheme",
+            "that",
+            "the",
+            "a",
+            "an",
+            "my",
+            "your",
+            "this",
+            "new",
+            "old",
+            "default",
+            "custom",
+            "config",
         }
         for pattern in patterns:
             match = re.search(pattern, call_text, re.IGNORECASE)

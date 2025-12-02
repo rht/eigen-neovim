@@ -8,17 +8,17 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from .github_client import (
-    GitHubClient,
-    FetchState,
     QUERY_TEMPLATES,
+    FetchState,
+    GitHubClient,
     load_configs_from_disk,
     save_configs_to_disk,
 )
-from .output import generate_eigen_lua, generate_markdown_report, generate_lazy_plugin_spec
+from .output import generate_eigen_lua, generate_lazy_plugin_spec, generate_markdown_report
 from .stats import StatsAggregator
 
 # Load .env file if present
@@ -130,6 +130,17 @@ def fetch(token: str | None, query: str, max_repos: int, output_dir: Path):
     default=1.0,
     help="Minimum percentage for inclusion in report",
 )
+@click.option(
+    "--plot",
+    type=click.Path(path_type=Path),
+    default=Path("fig.png"),
+    help="Output plot file",
+)
+@click.option(
+    "--log-scale",
+    is_flag=True,
+    help="Use log-log scale for plot (better for power law visualization)",
+)
 def analyze(
     input_dir: Path,
     output: Path,
@@ -137,6 +148,8 @@ def analyze(
     plugins_lua: Path | None,
     threshold: float,
     min_percentage: float,
+    plot: Path,
+    log_scale: bool,
 ):
     """Analyze downloaded configurations."""
     console.print(f"[bold]Analyzing configs in {input_dir}...[/bold]")
@@ -189,9 +202,26 @@ def analyze(
         table.add_row(cs.name, f"{cs.percentage:.1f}%")
     console.print(table)
 
+    # Generate plot with power law fit (do this first to include in report)
+    power_law_fit = None
+    try:
+        from .plotting import generate_plot
+
+        power_law_fit = generate_plot(stats, plot, log_scale=log_scale)
+        console.print(f"\n[green]Plot saved to {plot}[/green]")
+        console.print(
+            f"Power law fit: y = {power_law_fit.coefficient:.1f} × x^(-{power_law_fit.exponent:.2f}), "
+            f"R² = {power_law_fit.r_squared:.3f}"
+        )
+    except ImportError:
+        console.print(
+            "\n[yellow]Plot skipped: install plot dependencies with "
+            "'pip install -e .[plot]'[/yellow]"
+        )
+
     # Generate outputs
-    generate_markdown_report(stats, output)
-    console.print(f"\n[green]Report saved to {output}[/green]")
+    generate_markdown_report(stats, output, power_law_fit=power_law_fit)
+    console.print(f"[green]Report saved to {output}[/green]")
 
     generate_eigen_lua(stats, eigen_lua, threshold=threshold)
     console.print(f"[green]Eigen config saved to {eigen_lua}[/green]")
@@ -247,7 +277,7 @@ def run(
         )
         raise SystemExit(1)
 
-    console.print(f"[bold]Eigen-Neovim Analysis[/bold]")
+    console.print("[bold]Eigen-Neovim Analysis[/bold]")
     console.print(f"Query: [cyan]{query}[/cyan]")
     console.print(f"Max repos: {max_repos}\n")
 
@@ -369,9 +399,7 @@ def fetch_all(
         for i, q in enumerate(QUERY_TEMPLATES, 1):
             console.print(f"  {i:2}. {q}")
         console.print(f"\n[dim]Total: {len(QUERY_TEMPLATES)} queries[/dim]")
-        console.print(
-            "[dim]Each query can return up to 1000 results (GitHub limit)[/dim]"
-        )
+        console.print("[dim]Each query can return up to 1000 results (GitHub limit)[/dim]")
         return
 
     token = get_github_token(token)
@@ -389,24 +417,32 @@ def fetch_all(
 
         # Handle --reset-queries: keep seen_repos but restart query iteration
         if reset_queries:
-            console.print(f"[yellow]Resetting queries (keeping {len(state.seen_repos)} seen repos)[/yellow]")
+            console.print(
+                f"[yellow]Resetting queries (keeping {len(state.seen_repos)} seen repos)[/yellow]"
+            )
             state.query_index = 0
             state.page = 1
             state.completed_queries = []
         else:
-            console.print(f"[yellow]Resuming from previous state:[/yellow]")
+            console.print("[yellow]Resuming from previous state:[/yellow]")
             console.print(f"  - Previously fetched: {state.total_fetched}")
             console.print(f"  - Seen repos: {len(state.seen_repos)}")
-            console.print(f"  - Completed queries: {len(state.completed_queries)}/{len(QUERY_TEMPLATES)}")
+            console.print(
+                f"  - Completed queries: {len(state.completed_queries)}/{len(QUERY_TEMPLATES)}"
+            )
             console.print(f"  - Current query index: {state.query_index}")
             console.print()
 
             # Check if all queries have been exhausted
             if state.query_index >= len(QUERY_TEMPLATES):
-                console.print(f"[green]All {len(QUERY_TEMPLATES)} queries have been completed![/green]")
+                console.print(
+                    f"[green]All {len(QUERY_TEMPLATES)} queries have been completed![/green]"
+                )
                 console.print(f"[green]Total fetched: {state.total_fetched}[/green]")
-                console.print(f"[dim]To start fresh, use --no-resume[/dim]")
-                console.print(f"[dim]To re-run queries while keeping seen repos, use --reset-queries[/dim]")
+                console.print("[dim]To start fresh, use --no-resume[/dim]")
+                console.print(
+                    "[dim]To re-run queries while keeping seen repos, use --reset-queries[/dim]"
+                )
                 return
     else:
         state = FetchState()
@@ -415,9 +451,7 @@ def fetch_all(
 
     # Check existing cache
     output_dir.mkdir(parents=True, exist_ok=True)
-    cached_count = len(list(output_dir.glob("*.lua"))) - len(
-        list(output_dir.glob("*.meta"))
-    )
+    cached_count = len(list(output_dir.glob("*.lua"))) - len(list(output_dir.glob("*.meta")))
     if cached_count > 0:
         console.print(f"[dim]Found {cached_count} cached configs in {output_dir}[/dim]")
 
@@ -470,7 +504,7 @@ def fetch_all(
                 console.print("\n[yellow]Interrupted! Saving state...[/yellow]")
                 save_state(state)
                 console.print(f"[green]State saved to {state_file}[/green]")
-                console.print(f"[green]Run again with --resume to continue[/green]")
+                console.print("[green]Run again with --resume to continue[/green]")
                 raise SystemExit(0)
 
     # Final state save
@@ -478,13 +512,17 @@ def fetch_all(
 
     console.print(f"\n[green]Saved {saved_count} new configs to {output_dir}[/green]")
     console.print(f"[green]Total fetched: {state.total_fetched}[/green]")
-    console.print(f"[dim]Completed queries: {len(state.completed_queries)}/{len(QUERY_TEMPLATES)}[/dim]")
+    console.print(
+        f"[dim]Completed queries: {len(state.completed_queries)}/{len(QUERY_TEMPLATES)}[/dim]"
+    )
     console.print(f"[dim]Failed repos: {len(state.failed_repos)}[/dim]")
 
     # Check if we stopped early (rate limiting or other interruption)
     if state.query_index < len(QUERY_TEMPLATES):
-        console.print(f"\n[yellow]Stopped early (likely rate limited)[/yellow]")
-        console.print(f"[yellow]Run again with --resume to continue from query {state.query_index + 1}[/yellow]")
+        console.print("\n[yellow]Stopped early (likely rate limited)[/yellow]")
+        console.print(
+            f"[yellow]Run again with --resume to continue from query {state.query_index + 1}[/yellow]"
+        )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 # Patterns that strongly indicate Neovim config
 NEOVIM_POSITIVE_PATTERNS = [
     # Core vim.* API
@@ -149,11 +148,15 @@ def is_neovim_config(content: str, threshold: float = 0.5) -> tuple[bool, float,
     # Calculate score
     # Strong negative patterns are disqualifying
     if negative_matches and not positive_matches:
-        return False, 0.0, {
-            "positive": positive_matches,
-            "negative": negative_matches,
-            "reason": "negative_only",
-        }
+        return (
+            False,
+            0.0,
+            {
+                "positive": positive_matches,
+                "negative": negative_matches,
+                "reason": "negative_only",
+            },
+        )
 
     # Calculate weighted score
     positive_score = min(len(positive_matches) / 3.0, 1.0)  # 3+ matches = full score
@@ -177,8 +180,12 @@ def is_neovim_config(content: str, threshold: float = 0.5) -> tuple[bool, float,
 
     is_neovim = confidence >= threshold
 
-    return is_neovim, confidence, {
-        "positive": positive_matches,
-        "negative": negative_matches,
-        "reason": "score_based",
-    }
+    return (
+        is_neovim,
+        confidence,
+        {
+            "positive": positive_matches,
+            "negative": negative_matches,
+            "reason": "score_based",
+        },
+    )

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field, asdict
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 
 import httpx
 from tenacity import (
+    RetryError,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    RetryError,
 )
 
 
@@ -151,7 +151,7 @@ class FetchState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "FetchState":
+    def from_dict(cls, data: dict) -> FetchState:
         return cls(
             query_index=data.get("query_index", 0),
             page=data.get("page", 1),
@@ -166,7 +166,7 @@ class FetchState:
         path.write_text(json.dumps(self.to_dict(), indent=2))
 
     @classmethod
-    def load(cls, path: Path) -> "FetchState":
+    def load(cls, path: Path) -> FetchState:
         """Load state from JSON file."""
         if path.exists():
             return cls.from_dict(json.loads(path.read_text()))
@@ -398,7 +398,7 @@ class GitHubClient:
                         query_exhausted = True
                         break
                     raise
-                except (RateLimitError, RetryError) as e:
+                except (RateLimitError, RetryError):
                     # Rate limited (or retries exhausted) - don't mark query as completed
                     rate_limited = True
                     break
@@ -456,9 +456,7 @@ class GitHubClient:
                     # Get file content
                     file_path = item.get("path", "")
                     try:
-                        content = self._get_raw_content(
-                            owner, name, default_branch, file_path
-                        )
+                        content = self._get_raw_content(owner, name, default_branch, file_path)
                         state.total_fetched += 1
 
                         if progress_callback:
@@ -472,7 +470,7 @@ class GitHubClient:
 
                         yield ConfigFile(repo=repo, path=file_path, content=content)
 
-                    except Exception as e:
+                    except Exception:
                         state.failed_repos.add(full_name)
                         continue
 

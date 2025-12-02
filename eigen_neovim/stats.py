@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
-from typing import Any, Iterator
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 import polars as pl
 
+from .detector import is_neovim_config
 from .github_client import ConfigFile
 from .parser import LuaConfigParser, ParseResult
-from .detector import is_neovim_config
 
 
 @dataclass
@@ -124,9 +124,7 @@ class StatsAggregator:
 
         return result
 
-    def add_configs(
-        self, configs: Iterator[ConfigFile], progress_callback=None
-    ) -> None:
+    def add_configs(self, configs: Iterator[ConfigFile], progress_callback=None) -> None:
         """Add multiple configs to the statistics."""
         for i, config in enumerate(configs):
             self.add_config(config)
@@ -169,9 +167,7 @@ class StatsAggregator:
         for (mode, lhs), count in self._keymaps.most_common(100):
             pct = count * 100.0 / total
             if pct >= min_percentage:
-                keymaps.append(
-                    KeymapStat(lhs=lhs, mode=mode, count=count, percentage=pct)
-                )
+                keymaps.append(KeymapStat(lhs=lhs, mode=mode, count=count, percentage=pct))
 
         return AggregatedStats(
             total_configs=self._total_configs,
