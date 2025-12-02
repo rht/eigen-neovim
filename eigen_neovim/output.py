@@ -6,153 +6,78 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from jinja2 import Environment, PackageLoader
+
 from .stats import AggregatedStats
 
 if TYPE_CHECKING:
     from .plotting import PowerLawFit
 
+# Initialize Jinja2 environment
+_jinja_env = Environment(
+    loader=PackageLoader("eigen_neovim", "templates"),
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
+
+
+def _format_option_setting(opt) -> str:
+    """Format an option as a vim.opt.* setting string."""
+    if opt.values:
+        top_value, _ = opt.values.most_common(1)[0]
+        if top_value in ("True", "true"):
+            return f"vim.opt.{opt.name} = true"
+        elif top_value in ("False", "false"):
+            return f"vim.opt.{opt.name} = false"
+        elif top_value.isdigit():
+            return f"vim.opt.{opt.name} = {top_value}"
+        elif top_value.startswith("{") or top_value.startswith("vim."):
+            return f"vim.opt.{opt.name} = {top_value}"
+        else:
+            return f'vim.opt.{opt.name} = "{top_value}"'
+    return f"vim.opt.{opt.name} = true"
+
 
 def generate_markdown_report(
-    stats: AggregatedStats, output_path: Path, power_law_fit: PowerLawFit | None = None
+    stats: AggregatedStats,
+    output_path: Path,
+    power_law_fit: PowerLawFit | None = None,
+    query: str = "filename:init.lua path:nvim",
 ) -> None:
-    """Generate a markdown report of the analysis."""
-    lines = [
-        "# Eigen-Neovim Analysis Results",
-        "",
-        f"Analysis of **{stats.total_configs}** Neovim Lua configurations.",
-        "",
-        f"Last updated: {datetime.now().strftime('%Y-%m-%d')}",
-        "",
-        "---",
-        "",
-        "## Most Common Options",
-        "",
-        "| Rank | Option | Usage |",
-        "|------|--------|-------|",
+    """Generate a markdown report of the analysis using Jinja2 template."""
+    template = _jinja_env.get_template("readme.md.j2")
+
+    # Prepare options data with formatted settings
+    options_data = [
+        {"setting": _format_option_setting(opt), "percentage": opt.percentage}
+        for opt in stats.options[:100]
     ]
 
-    for i, opt in enumerate(stats.options[:50], 1):
-        # Show most common value if not just true/false
-        value_info = ""
-        if opt.values:
-            top_value, top_count = opt.values.most_common(1)[0]
-            if top_value not in ("True", "true"):
-                value_info = f" (commonly `{top_value}`)"
-        lines.append(f"| {i} | `{opt.name}` | {opt.percentage:.1f}%{value_info} |")
-
-    lines.extend(
-        [
-            "",
-            "---",
-            "",
-            "## Most Popular Plugins",
-            "",
-            "| Rank | Plugin | Usage |",
-            "|------|--------|-------|",
-        ]
-    )
-
-    for i, plugin in enumerate(stats.plugins[:30], 1):
-        lines.append(f"| {i} | `{plugin.name}` | {plugin.percentage:.1f}% |")
-
-    lines.extend(
-        [
-            "",
-            "---",
-            "",
-            "## Colorscheme Preferences",
-            "",
-        ]
-    )
-
-    if stats.colorschemes:
-        lines.extend(
-            [
-                "| Rank | Colorscheme | Usage |",
-                "|------|-------------|-------|",
-            ]
-        )
-        for i, cs in enumerate(stats.colorschemes[:15], 1):
-            lines.append(f"| {i} | `{cs.name}` | {cs.percentage:.1f}% |")
-    else:
-        lines.append("*No colorschemes detected (many configs load colorschemes via plugin setup)*")
-
-    # Leader key statistics
-    if stats.leader_keys:
-        lines.extend(
-            [
-                "",
-                "---",
-                "",
-                "## Leader Key Preferences",
-                "",
-            ]
-        )
-        total_leaders = sum(stats.leader_keys.values())
-        for key, count in stats.leader_keys.most_common(5):
-            pct = count * 100.0 / total_leaders
-            display_key = key if key.strip() else "(space)"
-            if key == " ":
-                display_key = "Space"
-            lines.append(f"- `{display_key}`: {pct:.1f}%")
-
-    # Common keymaps
-    if stats.keymaps:
-        lines.extend(
-            [
-                "",
-                "---",
-                "",
-                "## Common Keymaps",
-                "",
-                "| Mode | LHS | Usage |",
-                "|------|-----|-------|",
-            ]
-        )
-        for km in stats.keymaps[:20]:
-            lines.append(f"| `{km.mode}` | `{km.lhs}` | {km.percentage:.1f}% |")
-
-    # Power law distribution analysis
+    # Prepare power law fit data
+    power_law_data = None
     if power_law_fit and power_law_fit.r_squared > 0:
-        lines.extend(
-            [
-                "",
-                "---",
-                "",
-                "## Distribution Analysis",
-                "",
-                "Power law fit for option usage: `y = c × x^(-α)`",
-                "",
-                f"- Coefficient (c): {power_law_fit.coefficient:.2f}",
-                f"- Exponent (α): {power_law_fit.exponent:.2f}",
-                f"- R² (goodness of fit): {power_law_fit.r_squared:.3f}",
-                "",
-                "![Distribution plot](fig.png)",
-                "",
-                "*Note: The original eigenvimrc (2017) found that option usage doesn't follow "
-                "a pure power law distribution, likely because some settings are highly "
-                "correlated with others.*",
-            ]
-        )
+        power_law_data = {
+            "coefficient": power_law_fit.coefficient,
+            "exponent": power_law_fit.exponent,
+            "r_squared": power_law_fit.r_squared,
+            "note": (
+                "Strangely it doesn't follow the power law distribution. "
+                "Likely because some settings are highly correlated with the others."
+            ),
+        }
 
-    # Metadata
-    lines.extend(
-        [
-            "",
-            "---",
-            "",
-            "## Metadata",
-            "",
-            f"- Total configurations analyzed: {stats.total_configs}",
-            f"- Parse errors: {stats.parse_errors} ({stats.parse_errors * 100.0 / max(stats.total_configs, 1):.1f}%)",
-            "",
-            "---",
-            "",
-            "*Generated by [eigen-neovim](https://github.com/rht/eigenvimrc)*",
-        ]
+    # Render template
+    content = template.render(
+        total_configs=stats.total_configs,
+        options=options_data,
+        colorschemes=stats.colorschemes[:20],
+        plugins=stats.plugins[:30],
+        power_law_fit=power_law_data,
+        date=datetime.now().strftime("%b %d %Y"),
+        query=query,
     )
 
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    output_path.write_text(content, encoding="utf-8")
 
 
 def generate_eigen_lua(

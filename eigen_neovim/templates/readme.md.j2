@@ -1,0 +1,36 @@
+This script analyzes Neovim Lua configurations hosted on GitHub and returns the most commonly used settings.
+
+# Result
+
+Most common Neovim config out of {{ total_configs }} init.lua files
+
+{% for opt in options %}
+{{ loop.index0 }}. ```{{ opt.setting }}``` {{ "%.2f"|format(opt.percentage) }}%
+{% endfor %}
+
+# Colorscheme stat
+{% for cs in colorschemes %}
+{{ loop.index0 }}. {{ cs.name }} {{ "%.2f"|format(cs.percentage) }}%
+{% endfor %}
+
+# Plugin stat
+{% for plugin in plugins %}
+{{ loop.index0 }}. {{ plugin.name }} {{ "%.2f"|format(plugin.percentage) }}%
+{% endfor %}
+{% if power_law_fit %}
+
+# Plot
+{% if power_law_fit.note %}
+{{ power_law_fit.note }}
+{% endif %}
+![plot](fig.png)
+
+Power law fit: y = {{ "%.1f"|format(power_law_fit.coefficient) }} × x^(-{{ "%.2f"|format(power_law_fit.exponent) }}), R² = {{ "%.3f"|format(power_law_fit.r_squared) }}
+{% endif %}
+
+# Data
+
+Last updated {{ date }}.
+Repository list is queried from GitHub Code Search API.
+
+Query: `{{ query }}`

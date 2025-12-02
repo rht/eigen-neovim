@@ -105,7 +105,7 @@ def fetch(token: str | None, query: str, max_repos: int, output_dir: Path):
 @click.option(
     "--output",
     type=click.Path(path_type=Path),
-    default=Path("RESULTS.md"),
+    default=Path("README.md"),
     help="Output markdown file",
 )
 @click.option(
@@ -245,7 +245,7 @@ def analyze(
 @click.option(
     "--output",
     type=click.Path(path_type=Path),
-    default=Path("RESULTS.md"),
+    default=Path("README.md"),
     help="Output markdown file",
 )
 @click.option(
