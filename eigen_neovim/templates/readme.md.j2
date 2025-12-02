@@ -1,4 +1,20 @@
+TODO: create phylogenetic tree of vimrcs
+
 This script analyzes Neovim Lua configurations hosted on GitHub and returns the most commonly used settings.
+
+See [USAGE.md](./USAGE.md) if you want to reproduce the result.
+The "voting" process may iterate as follows:
+
+```python
+def vote(default):
+    init_lua = people_curate_their_init_lua()
+    sleep(a_month)
+    new_default = most_common_50_percent(init_lua)
+    if new_default != default:
+        return vote(new_default)
+    else:
+        return new_default
+```
 
 # Result
 

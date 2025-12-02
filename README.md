@@ -1,4 +1,20 @@
+TODO: create phylogenetic tree of vimrcs
+
 This script analyzes Neovim Lua configurations hosted on GitHub and returns the most commonly used settings.
+
+See [USAGE.md](./USAGE.md) if you want to reproduce the result.
+The "voting" process may iterate as follows:
+
+```python
+def vote(default):
+    init_lua = people_curate_their_init_lua()
+    sleep(a_month)
+    new_default = most_common_50_percent(init_lua)
+    if new_default != default:
+        return vote(new_default)
+    else:
+        return new_default
+```
 
 # Result
 
@@ -101,6 +117,16 @@ Most common Neovim config out of 2546 init.lua files
 7. catppuccin-mocha 0.94%
 8. vscode 0.86%
 9. nightfox 0.63%
+10. dracula 0.63%
+11. gruvbox-material 0.63%
+12. habamax 0.47%
+13. material 0.39%
+14. nord 0.35%
+15. rose-pine-moon 0.35%
+16. ayu 0.35%
+17. solarized 0.31%
+18. tokyonight-storm 0.27%
+19. kanagawa-dragon 0.27%
 
 # Plugin stat
 0. nvim-treesitter/nvim-treesitter 4.87%
