@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import click
@@ -32,6 +33,57 @@ def get_github_token(token: str | None) -> str | None:
     if token:
         return token
     return os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
+
+
+def _parse_since(since: str) -> datetime | None:
+    """Parse --since argument into a datetime.
+
+    Supports:
+    - Relative: '1y', '6m', '30d', '2w'
+    - Absolute: '2024-01-01', '2024-06-15'
+    """
+    since = since.strip().lower()
+
+    # Relative formats
+    if since.endswith("y"):
+        years = int(since[:-1])
+        return datetime.now(timezone.utc) - timedelta(days=years * 365)
+    if since.endswith("m"):
+        months = int(since[:-1])
+        return datetime.now(timezone.utc) - timedelta(days=months * 30)
+    if since.endswith("w"):
+        weeks = int(since[:-1])
+        return datetime.now(timezone.utc) - timedelta(weeks=weeks)
+    if since.endswith("d"):
+        days = int(since[:-1])
+        return datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Absolute date format (YYYY-MM-DD)
+    try:
+        return datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+
+    return None
+
+
+def _filter_configs_by_date(configs: list, since_dt: datetime) -> list:
+    """Filter configs to only those with pushed_at >= since_dt."""
+    filtered = []
+    for config in configs:
+        pushed_at = config.repo.pushed_at
+        if not pushed_at:
+            # No timestamp - skip (or include? user choice)
+            continue
+        try:
+            # Parse ISO 8601 timestamp from GitHub
+            config_dt = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
+            if config_dt >= since_dt:
+                filtered.append(config)
+        except (ValueError, AttributeError):
+            # Can't parse - skip
+            continue
+    return filtered
 
 
 @click.group()
@@ -141,6 +193,12 @@ def fetch(token: str | None, query: str, max_repos: int, output_dir: Path):
     is_flag=True,
     help="Use log-log scale for plot (better for power law visualization)",
 )
+@click.option(
+    "--since",
+    type=str,
+    default=None,
+    help="Only include configs updated since this date (e.g., '1y', '6m', '2024-01-01')",
+)
 def analyze(
     input_dir: Path,
     output: Path,
@@ -150,9 +208,17 @@ def analyze(
     min_percentage: float,
     plot: Path,
     log_scale: bool,
+    since: str | None,
 ):
     """Analyze downloaded configurations."""
     console.print(f"[bold]Analyzing configs in {input_dir}...[/bold]")
+
+    # Parse --since filter
+    since_dt = None
+    if since:
+        since_dt = _parse_since(since)
+        if since_dt:
+            console.print(f"Filtering: only configs updated after [cyan]{since_dt.date()}[/cyan]")
 
     aggregator = StatsAggregator()
 
@@ -164,6 +230,13 @@ def analyze(
         task = progress.add_task("Loading configs...", total=None)
         configs = list(load_configs_from_disk(input_dir))
         progress.update(task, description=f"Loaded {len(configs)} configs")
+
+        # Filter by pushed_at if --since specified
+        if since_dt:
+            original_count = len(configs)
+            configs = _filter_configs_by_date(configs, since_dt)
+            skipped = original_count - len(configs)
+            console.print(f"[dim]Filtered to {len(configs)} configs ({skipped} older, excluded)[/dim]")
 
         task2 = progress.add_task("Parsing...", total=len(configs))
         for i, config in enumerate(configs):
