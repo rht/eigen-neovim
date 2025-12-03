@@ -27,6 +27,7 @@ class RepoInfo:
     url: str
     stars: int
     default_branch: str = "main"
+    pushed_at: str = ""  # ISO 8601 timestamp of last push
 
 
 @dataclass
@@ -309,14 +310,16 @@ class GitHubClient:
                     continue
                 owner, name = parts
 
-                # Get repo details (stars, default branch)
+                # Get repo details (stars, default branch, pushed_at)
                 try:
                     repo_info = self._get_repo_info(owner, name)
                     stars = repo_info.get("stargazers_count", 0)
                     default_branch = repo_info.get("default_branch", "main")
+                    pushed_at = repo_info.get("pushed_at", "")
                 except Exception:
                     stars = 0
                     default_branch = "main"
+                    pushed_at = ""
 
                 repo = RepoInfo(
                     owner=owner,
@@ -324,6 +327,7 @@ class GitHubClient:
                     url=repo_data.get("html_url", f"https://github.com/{full_name}"),
                     stars=stars,
                     default_branch=default_branch,
+                    pushed_at=pushed_at,
                 )
 
                 if progress_callback:
@@ -441,9 +445,11 @@ class GitHubClient:
                         repo_info_data = self._get_repo_info(owner, name)
                         stars = repo_info_data.get("stargazers_count", 0)
                         default_branch = repo_info_data.get("default_branch", "main")
+                        pushed_at = repo_info_data.get("pushed_at", "")
                     except Exception:
                         stars = 0
                         default_branch = "main"
+                        pushed_at = ""
 
                     repo = RepoInfo(
                         owner=owner,
@@ -451,6 +457,7 @@ class GitHubClient:
                         url=repo_data.get("html_url", f"https://github.com/{full_name}"),
                         stars=stars,
                         default_branch=default_branch,
+                        pushed_at=pushed_at,
                     )
 
                     # Get file content
@@ -539,7 +546,7 @@ def save_configs_to_disk(configs: Iterator[ConfigFile], output_dir: Path):
         # Save metadata
         meta_path = output_dir / f"{filename}.meta"
         meta_path.write_text(
-            f"url={config.repo.url}\nstars={config.repo.stars}\npath={config.path}\n"
+            f"url={config.repo.url}\nstars={config.repo.stars}\npath={config.path}\npushed_at={config.repo.pushed_at}\n"
         )
         yield config
 
@@ -570,6 +577,7 @@ def load_configs_from_disk(input_dir: Path) -> Iterator[ConfigFile]:
                 name=name,
                 url=meta.get("url", ""),
                 stars=int(meta.get("stars", 0)),
+                pushed_at=meta.get("pushed_at", ""),
             ),
             path=meta.get("path", "init.lua"),
             content=content,
