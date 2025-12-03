@@ -27,7 +27,8 @@ class RepoInfo:
     url: str
     stars: int
     default_branch: str = "main"
-    pushed_at: str = ""  # ISO 8601 timestamp of last push
+    pushed_at: str = ""  # ISO 8601 timestamp of last repo push
+    file_committed_at: str = ""  # ISO 8601 timestamp of last commit to the config file
 
 
 @dataclass
@@ -259,6 +260,25 @@ class GitHubClient:
         response.raise_for_status()
         return response.text
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        retry=retry_if_exception_type(httpx.HTTPStatusError),
+    )
+    def _get_file_last_commit(self, owner: str, name: str, path: str) -> str:
+        """Get the date of the last commit that modified a specific file."""
+        self._rate_limit_wait()
+        response = self.client.get(
+            f"{self.REPOS_URL}/{owner}/{name}/commits",
+            params={"path": path, "per_page": 1},
+        )
+        self._check_rate_limit(response)
+        commits = response.json()
+        if commits and len(commits) > 0:
+            # Return the commit date (not author date)
+            return commits[0].get("commit", {}).get("committer", {}).get("date", "")
+        return ""
+
     def search_configs(
         self,
         query: str = "filename:init.lua path:nvim",
@@ -310,6 +330,8 @@ class GitHubClient:
                     continue
                 owner, name = parts
 
+                file_path = item.get("path", "")
+
                 # Get repo details (stars, default branch, pushed_at)
                 try:
                     repo_info = self._get_repo_info(owner, name)
@@ -321,6 +343,12 @@ class GitHubClient:
                     default_branch = "main"
                     pushed_at = ""
 
+                # Get last commit date for the specific file
+                try:
+                    file_committed_at = self._get_file_last_commit(owner, name, file_path)
+                except Exception:
+                    file_committed_at = ""
+
                 repo = RepoInfo(
                     owner=owner,
                     name=name,
@@ -328,13 +356,13 @@ class GitHubClient:
                     stars=stars,
                     default_branch=default_branch,
                     pushed_at=pushed_at,
+                    file_committed_at=file_committed_at,
                 )
 
                 if progress_callback:
                     progress_callback(fetched + 1, max_repos, repo)
 
                 # Get file content
-                file_path = item.get("path", "")
                 try:
                     content = self._get_raw_content(owner, name, default_branch, file_path)
                     fetched += 1
@@ -440,6 +468,8 @@ class GitHubClient:
                             )
                         continue
 
+                    file_path = item.get("path", "")
+
                     # Get repo details
                     try:
                         repo_info_data = self._get_repo_info(owner, name)
@@ -451,6 +481,12 @@ class GitHubClient:
                         default_branch = "main"
                         pushed_at = ""
 
+                    # Get last commit date for the specific file
+                    try:
+                        file_committed_at = self._get_file_last_commit(owner, name, file_path)
+                    except Exception:
+                        file_committed_at = ""
+
                     repo = RepoInfo(
                         owner=owner,
                         name=name,
@@ -458,10 +494,10 @@ class GitHubClient:
                         stars=stars,
                         default_branch=default_branch,
                         pushed_at=pushed_at,
+                        file_committed_at=file_committed_at,
                     )
 
                     # Get file content
-                    file_path = item.get("path", "")
                     try:
                         content = self._get_raw_content(owner, name, default_branch, file_path)
                         state.total_fetched += 1
@@ -546,7 +582,8 @@ def save_configs_to_disk(configs: Iterator[ConfigFile], output_dir: Path):
         # Save metadata
         meta_path = output_dir / f"{filename}.meta"
         meta_path.write_text(
-            f"url={config.repo.url}\nstars={config.repo.stars}\npath={config.path}\npushed_at={config.repo.pushed_at}\n"
+            f"url={config.repo.url}\nstars={config.repo.stars}\npath={config.path}\n"
+            f"pushed_at={config.repo.pushed_at}\nfile_committed_at={config.repo.file_committed_at}\n"
         )
         yield config
 
@@ -578,6 +615,7 @@ def load_configs_from_disk(input_dir: Path) -> Iterator[ConfigFile]:
                 url=meta.get("url", ""),
                 stars=int(meta.get("stars", 0)),
                 pushed_at=meta.get("pushed_at", ""),
+                file_committed_at=meta.get("file_committed_at", ""),
             ),
             path=meta.get("path", "init.lua"),
             content=content,

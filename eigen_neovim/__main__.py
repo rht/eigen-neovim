@@ -68,16 +68,21 @@ def _parse_since(since: str) -> datetime | None:
 
 
 def _filter_configs_by_date(configs: list, since_dt: datetime) -> list:
-    """Filter configs to only those with pushed_at >= since_dt."""
+    """Filter configs to only those with file_committed_at >= since_dt.
+
+    Uses file_committed_at (last commit to the config file) for accurate filtering.
+    Falls back to pushed_at (last repo push) if file_committed_at is not available.
+    """
     filtered = []
     for config in configs:
-        pushed_at = config.repo.pushed_at
-        if not pushed_at:
-            # No timestamp - skip (or include? user choice)
+        # Prefer file_committed_at, fall back to pushed_at
+        timestamp = config.repo.file_committed_at or config.repo.pushed_at
+        if not timestamp:
+            # No timestamp - skip
             continue
         try:
             # Parse ISO 8601 timestamp from GitHub
-            config_dt = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
+            config_dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             if config_dt >= since_dt:
                 filtered.append(config)
         except (ValueError, AttributeError):
