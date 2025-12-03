@@ -298,7 +298,7 @@ def analyze(
         )
 
     # Generate outputs
-    generate_markdown_report(stats, output, power_law_fit=power_law_fit)
+    generate_markdown_report(stats, output, power_law_fit=power_law_fit, plot_filename=plot.name)
     console.print(f"[green]Report saved to {output}[/green]")
 
     generate_eigen_lua(stats, eigen_lua, threshold=threshold)
