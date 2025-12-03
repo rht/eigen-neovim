@@ -43,7 +43,7 @@ def generate_markdown_report(
     output_path: Path,
     power_law_fit: PowerLawFit | None = None,
     query: str = "filename:init.lua path:nvim",
-    plot_filename: str = "fig.png",
+    plot_filepath: str = "fig.png",
 ) -> None:
     """Generate a markdown report of the analysis using Jinja2 template."""
     template = _jinja_env.get_template("readme.md.j2")
@@ -76,7 +76,7 @@ def generate_markdown_report(
         power_law_fit=power_law_data,
         date=datetime.now().strftime("%b %d %Y"),
         query=query,
-        plot_filename=plot_filename,
+        plot_filepath=plot_filepath,
     )
 
     output_path.write_text(content, encoding="utf-8")

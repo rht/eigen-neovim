@@ -42,7 +42,7 @@ Most common Neovim config out of {{ total_configs }} init.lua files
 {% if power_law_fit.note %}
 {{ power_law_fit.note }}
 {% endif %}
-![plot]({{ plot_filename }})
+![plot]({{ plot_filepath }})
 
 Power law fit: y = {{ "%.1f"|format(power_law_fit.coefficient) }} × x^(-{{ "%.2f"|format(power_law_fit.exponent) }}), R² = {{ "%.3f"|format(power_law_fit.r_squared) }}
 {% endif %}
